@@ -40918,10 +40918,12 @@ class PassNode extends TempNode {
 	 *
 	 * @async
 	 * @param {Renderer} renderer - The renderer.
+	 * @param {number} [callDepth=1] - The render-call depth this pass draws at. A pass renders from inside
+	 * the render that reaches it (a post-processing pipeline's quad), which makes it depth 1.
 	 * @return {Promise} A Promise that resolves when the compile has been finished.
 	 * @see {@link Renderer#compileAsync}
 	 */
-	async compileAsync( renderer ) {
+	async compileAsync( renderer, callDepth = 1 ) {
 
 		const currentRenderTarget = renderer.getRenderTarget();
 		const currentMRT = renderer.getMRT();
@@ -40929,7 +40931,7 @@ class PassNode extends TempNode {
 		renderer.setRenderTarget( this.renderTarget );
 		renderer.setMRT( this._mrt );
 
-		await renderer.compileAsync( this.scene, this.camera );
+		await renderer.compileAsync( this.scene, this.camera, null, null, callDepth );
 
 		renderer.setRenderTarget( currentRenderTarget );
 		renderer.setMRT( currentMRT );
@@ -60060,9 +60062,14 @@ class Renderer {
 	 * @param {Object3D} scene - The scene or 3D object to precompile.
 	 * @param {Camera} camera - The camera that is used to render the scene.
 	 * @param {?Scene} targetScene - If the first argument is a 3D object, this parameter must represent the scene the 3D object is going to be added.
+	 * @param {null} [_onProgress] - Unused. Holds r186's `onProgress` position so `callDepth` is the fifth
+	 * argument on both branches.
+	 * @param {number} [callDepth=0] - The render-call depth the compiled objects will be drawn at. A scene
+	 * rendered by a pass inside a post-processing pipeline is a nested render (depth 1). Render contexts,
+	 * and so render-object cache keys, depend on that depth, so compile at the depth the frame will use.
 	 * @return {Promise} A Promise that resolves when the compile has been finished.
 	 */
-	async compileAsync( scene, camera, targetScene = null ) {
+	async compileAsync( scene, camera, targetScene = null, _onProgress = null, callDepth = 0 ) {
 
 		if ( this._isDeviceLost === true ) return;
 
@@ -60089,7 +60096,7 @@ class Renderer {
 		// Match render()'s logic: use frameBufferTarget when needsFrameBufferTarget is true
 		const useFrameBufferTarget = this.needsFrameBufferTarget && this._renderTarget === null;
 		const renderTarget = useFrameBufferTarget ? this._getFrameBufferTarget() : ( this._renderTarget || this._outputRenderTarget );
-		const renderContext = this._renderContexts.get( renderTarget, this._mrt );
+		const renderContext = this._renderContexts.get( renderTarget, this._mrt, callDepth );
 		const activeMipmapLevel = this._activeMipmapLevel;
 
 		const compilationPromises = [];

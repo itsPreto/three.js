@@ -743,10 +743,12 @@ class PassNode extends TempNode {
 	 *
 	 * @async
 	 * @param {Renderer} renderer - The renderer.
+	 * @param {number} [callDepth=1] - The render-call depth this pass draws at. A pass renders from inside
+	 * the render that reaches it (a post-processing pipeline's quad), which makes it depth 1.
 	 * @return {Promise} A Promise that resolves when the compile has been finished.
 	 * @see {@link Renderer#compileAsync}
 	 */
-	async compileAsync( renderer ) {
+	async compileAsync( renderer, callDepth = 1 ) {
 
 		const currentRenderTarget = renderer.getRenderTarget();
 		const currentMRT = renderer.getMRT();
@@ -754,7 +756,7 @@ class PassNode extends TempNode {
 		renderer.setRenderTarget( this.renderTarget );
 		renderer.setMRT( this._mrt );
 
-		await renderer.compileAsync( this.scene, this.camera );
+		await renderer.compileAsync( this.scene, this.camera, null, null, callDepth );
 
 		renderer.setRenderTarget( currentRenderTarget );
 		renderer.setMRT( currentMRT );

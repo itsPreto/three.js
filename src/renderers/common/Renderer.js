@@ -879,9 +879,14 @@ class Renderer {
 	 * @param {Object3D} scene - The scene or 3D object to precompile.
 	 * @param {Camera} camera - The camera that is used to render the scene.
 	 * @param {?Scene} targetScene - If the first argument is a 3D object, this parameter must represent the scene the 3D object is going to be added.
+	 * @param {null} [_onProgress] - Unused. Holds r186's `onProgress` position so `callDepth` is the fifth
+	 * argument on both branches.
+	 * @param {number} [callDepth=0] - The render-call depth the compiled objects will be drawn at. A scene
+	 * rendered by a pass inside a post-processing pipeline is a nested render (depth 1). Render contexts,
+	 * and so render-object cache keys, depend on that depth, so compile at the depth the frame will use.
 	 * @return {Promise} A Promise that resolves when the compile has been finished.
 	 */
-	async compileAsync( scene, camera, targetScene = null ) {
+	async compileAsync( scene, camera, targetScene = null, _onProgress = null, callDepth = 0 ) {
 
 		if ( this._isDeviceLost === true ) return;
 
@@ -908,7 +913,7 @@ class Renderer {
 		// Match render()'s logic: use frameBufferTarget when needsFrameBufferTarget is true
 		const useFrameBufferTarget = this.needsFrameBufferTarget && this._renderTarget === null;
 		const renderTarget = useFrameBufferTarget ? this._getFrameBufferTarget() : ( this._renderTarget || this._outputRenderTarget );
-		const renderContext = this._renderContexts.get( renderTarget, this._mrt );
+		const renderContext = this._renderContexts.get( renderTarget, this._mrt, callDepth );
 		const activeMipmapLevel = this._activeMipmapLevel;
 
 		const compilationPromises = [];
