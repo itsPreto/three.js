@@ -79957,11 +79957,17 @@ class WebGPUTextureUtils {
 				}
 
 
+			} else if ( texture.updateRanges.length > 0 && texture.flipY !== true ) {
+
+				this._copyBufferRangesToTexture( options.image, textureData.texture, textureDescriptorGPU, texture.updateRanges );
+
 			} else {
 
 				this._copyBufferToTexture( options.image, textureData.texture, textureDescriptorGPU, 0, texture.flipY );
 
 			}
+
+			texture.clearUpdateRanges();
 
 		} else if ( texture.isArrayTexture || texture.isDataArrayTexture || texture.isData3DTexture ) {
 
@@ -80411,6 +80417,85 @@ class WebGPUTextureUtils {
 			this._flipY( textureGPU, textureDescriptorGPU, originDepth );
 
 		}
+
+	}
+
+	/**
+	 * Uploads only the rows of a data texture named by its update ranges. A range counts components
+	 * of `image.data` (as `Texture#addUpdateRange` documents); each is widened to whole rows, the
+	 * rows are merged in place, and each merged span is one `writeTexture`. Components per texel come
+	 * from the data length, so one-, two- and four-channel formats all resolve correctly.
+	 *
+	 * @private
+	 * @param {Object} image - The data texture's image.
+	 * @param {GPUTexture} textureGPU - The GPU texture.
+	 * @param {Object} textureDescriptorGPU - The GPU texture descriptor.
+	 * @param {Array<Object>} updateRanges - The texture's update ranges; consumed in place.
+	 */
+	_copyBufferRangesToTexture( image, textureGPU, textureDescriptorGPU, updateRanges ) {
+
+		const device = this.backend.device;
+		const data = image.data;
+		const bytesPerTexel = this._getBytesPerTexel( textureDescriptorGPU.format );
+		const bytesPerRow = image.width * bytesPerTexel;
+		const rowComponents = data.length / image.height;
+
+		for ( const range of updateRanges ) {
+
+			const first = Math.max( 0, Math.floor( range.start / rowComponents ) );
+			const last = Math.min( image.height - 1, Math.floor( ( range.start + Math.max( 1, range.count ) - 1 ) / rowComponents ) );
+			range.start = first;
+			range.count = last + 1 - first;
+
+		}
+
+		updateRanges.sort( ( a, b ) => a.start - b.start );
+
+		let spanStart = -1, spanEnd = -1;
+
+		const flush = () => {
+
+			if ( spanStart < 0 || spanEnd <= spanStart ) return;
+
+			_texelCopyTextureInfo.texture = textureGPU;
+			_texelCopyTextureInfo.mipLevel = 0;
+			_texelCopyTextureInfo.origin.y = spanStart;
+
+			_texelCopyBufferLayout.offset = spanStart * bytesPerRow;
+			_texelCopyBufferLayout.bytesPerRow = bytesPerRow;
+
+			_extent3D$1.width = image.width;
+			_extent3D$1.height = spanEnd - spanStart;
+
+			device.queue.writeTexture( _texelCopyTextureInfo, data, _texelCopyBufferLayout, _extent3D$1 );
+
+			_texelCopyTextureInfo.reset();
+			_texelCopyBufferLayout.reset();
+			_extent3D$1.reset();
+
+		};
+
+		for ( const range of updateRanges ) {
+
+			const start = range.start, end = range.start + range.count;
+
+			if ( end <= start ) continue;
+
+			if ( start > spanEnd ) {
+
+				flush();
+				spanStart = start;
+				spanEnd = end;
+
+			} else if ( end > spanEnd ) {
+
+				spanEnd = end;
+
+			}
+
+		}
+
+		flush();
 
 	}
 
